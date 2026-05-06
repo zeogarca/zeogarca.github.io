@@ -1,0 +1,725 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Árbol de Decisiones — Clasificación de Clientes</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;700;800&family=DM+Serif+Display&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0e1a;
+    --surface: #111827;
+    --card: #161e2e;
+    --border: #1e2d45;
+    --accent: #00e5ff;
+    --accent2: #7c3aed;
+    --accent3: #f59e0b;
+    --text: #e2e8f0;
+    --muted: #64748b;
+    --yes: #22c55e;
+    --no: #ef4444;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'DM Serif Display', serif;
+    overflow-x: hidden;
+  }
+
+  /* ── SLIDE SYSTEM ── */
+  .slide {
+    display: none;
+    min-height: 100vh;
+    padding: 60px 80px;
+    position: relative;
+    animation: fadeSlide .45s ease both;
+  }
+  .slide.active { display: flex; flex-direction: column; justify-content: center; }
+
+  @keyframes fadeSlide {
+    from { opacity: 0; transform: translateY(18px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  /* GRID NOISE TEXTURE */
+  body::before {
+    content: '';
+    position: fixed; inset: 0;
+    background-image:
+      linear-gradient(rgba(0,229,255,.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0,229,255,.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none; z-index: 0;
+  }
+
+  /* ── NAV ── */
+  nav {
+    position: fixed; bottom: 36px; left: 50%; transform: translateX(-50%);
+    display: flex; align-items: center; gap: 14px; z-index: 100;
+    background: rgba(17,24,39,.85);
+    border: 1px solid var(--border);
+    padding: 12px 24px; border-radius: 999px;
+    backdrop-filter: blur(12px);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: .75rem; color: var(--muted);
+  }
+  nav button {
+    background: none; border: 1px solid var(--border);
+    color: var(--accent); padding: 6px 18px; border-radius: 999px;
+    cursor: pointer; font-family: inherit; font-size: .75rem;
+    transition: all .2s;
+  }
+  nav button:hover { background: var(--accent); color: #000; }
+  .slide-dots { display: flex; gap: 6px; }
+  .dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--border); cursor: pointer; transition: all .3s;
+  }
+  .dot.active { background: var(--accent); transform: scale(1.3); }
+
+  /* ── PROGRESS BAR ── */
+  #progress {
+    position: fixed; top: 0; left: 0; height: 3px;
+    background: linear-gradient(90deg, var(--accent), var(--accent2));
+    transition: width .4s ease; z-index: 200;
+  }
+
+  /* ── SLIDE LABEL ── */
+  .slide-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: .7rem; letter-spacing: .15em;
+    color: var(--accent); text-transform: uppercase;
+    margin-bottom: 16px;
+  }
+
+  /* ── TYPOGRAPHY ── */
+  h1 {
+    font-family: 'Syne', sans-serif;
+    font-size: clamp(2.8rem, 6vw, 5.5rem);
+    font-weight: 800;
+    line-height: 1.0;
+    background: linear-gradient(135deg, #fff 40%, var(--accent));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  h2 {
+    font-family: 'Syne', sans-serif;
+    font-size: clamp(1.8rem, 4vw, 3rem);
+    font-weight: 700;
+    color: #fff;
+  }
+
+  h3 {
+    font-family: 'Syne', sans-serif;
+    font-size: 1.2rem; font-weight: 700;
+    color: var(--accent);
+  }
+
+  p, li {
+    font-family: 'DM Serif Display', serif;
+    font-size: 1.05rem; line-height: 1.75;
+    color: #94a3b8;
+  }
+
+  /* ── CARDS ── */
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 16px; padding: 28px 32px;
+    position: relative; overflow: hidden;
+  }
+  .card::before {
+    content: ''; position: absolute; top: 0; left: 0;
+    width: 3px; height: 100%;
+    background: linear-gradient(180deg, var(--accent), transparent);
+  }
+
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
+
+  /* ── HIGHLIGHT BOX ── */
+  .highlight {
+    display: inline-block;
+    background: linear-gradient(135deg, rgba(0,229,255,.12), rgba(124,58,237,.12));
+    border: 1px solid rgba(0,229,255,.25);
+    border-radius: 8px; padding: 2px 10px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: .9rem; color: var(--accent);
+  }
+
+  /* ── DECISION TREE SVG SLIDE ── */
+  .tree-wrap { display: flex; justify-content: center; margin-top: 20px; }
+
+  /* ── METHODOLOGY FLOW ── */
+  .flow {
+    display: flex; align-items: center; gap: 0; flex-wrap: wrap;
+    margin-top: 24px;
+  }
+  .flow-step {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 12px; padding: 18px 22px;
+    text-align: center; flex: 1; min-width: 130px;
+    position: relative;
+  }
+  .flow-step .num {
+    font-family: 'Syne', sans-serif; font-weight: 800;
+    font-size: 2rem; color: var(--accent);
+    display: block; margin-bottom: 6px;
+  }
+  .flow-arrow {
+    font-size: 1.5rem; color: var(--muted); padding: 0 8px;
+    flex-shrink: 0;
+  }
+
+  /* ── TABLE ── */
+  table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+  thead th {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: .75rem; text-transform: uppercase;
+    letter-spacing: .1em; color: var(--accent);
+    border-bottom: 2px solid var(--border);
+    padding: 12px 16px; text-align: left;
+  }
+  tbody td {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: .88rem; color: #94a3b8;
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--border);
+  }
+  tbody tr:hover td { background: rgba(0,229,255,.04); }
+
+  /* ── COVER SLIDE SPECIFIC ── */
+  .cover-meta {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: .85rem; color: var(--muted);
+    margin-top: 32px; line-height: 2;
+  }
+  .cover-meta span { color: var(--text); }
+
+  /* ── BADGE ── */
+  .badge {
+    display: inline-flex; align-items: center; gap: 6px;
+    border: 1px solid;
+    border-radius: 999px; padding: 4px 14px;
+    font-family: 'JetBrains Mono', monospace; font-size: .72rem;
+    font-weight: 600; text-transform: uppercase; letter-spacing: .1em;
+  }
+  .badge.yes { color: var(--yes); border-color: var(--yes); background: rgba(34,197,94,.08); }
+  .badge.no  { color: var(--no);  border-color: var(--no);  background: rgba(239,68,68,.08); }
+  .badge.neu { color: var(--accent3); border-color: var(--accent3); background: rgba(245,158,11,.08); }
+
+  /* ── BIG NUMBER ── */
+  .big-num {
+    font-family: 'Syne', sans-serif; font-weight: 800;
+    font-size: 3.5rem; color: var(--accent);
+    line-height: 1;
+  }
+
+  /* ── QUOTE BLOCK ── */
+  blockquote {
+    border-left: 3px solid var(--accent2);
+    padding: 16px 24px; margin: 20px 0;
+    color: #94a3b8; font-style: italic;
+    background: rgba(124,58,237,.06);
+    border-radius: 0 12px 12px 0;
+  }
+  blockquote strong { color: var(--text); font-style: normal; }
+
+  ul { padding-left: 24px; margin-top: 12px; }
+  ul li { margin-bottom: 10px; }
+
+  .slide > * { position: relative; z-index: 1; }
+
+  /* ── GLOW ORBS ── */
+  .orb {
+    position: absolute; border-radius: 50%;
+    filter: blur(80px); opacity: .18; pointer-events: none;
+  }
+  .orb-a { width: 500px; height: 500px; background: var(--accent); top: -200px; right: -150px; }
+  .orb-b { width: 400px; height: 400px; background: var(--accent2); bottom: -180px; left: -100px; }
+
+  /* ── REFERENCES ── */
+  .ref-list { list-style: none; padding: 0; }
+  .ref-list li {
+    font-family: 'JetBrains Mono', monospace; font-size: .78rem;
+    color: var(--muted); padding: 10px 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .ref-list li span { color: var(--accent3); }
+</style>
+</head>
+<body>
+
+<div id="progress"></div>
+
+<!-- ══════════════════════════════════════
+     SLIDE 1 — PORTADA
+═══════════════════════════════════════ -->
+<section class="slide active" id="s1">
+  <div class="orb orb-a"></div>
+  <div class="orb orb-b"></div>
+  <div class="slide-label">// Toma de Decisiones — Avance de Proyecto Final</div>
+  <h1>Árbol de Decisiones<br>para Clasificación<br>de Clientes</h1>
+  <div class="cover-meta">
+    <div>Autor &nbsp;&nbsp;&nbsp; <span>Edgar Leonardo García Zavala
+    </span></div>
+    <div>Materia <span>Toma de Decisiones</span></div>
+    <div>Fecha &nbsp;&nbsp;<span>Mayo 2026</span></div>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════
+     SLIDE 2 — INTRODUCCIÓN
+═══════════════════════════════════════ -->
+<section class="slide" id="s2">
+  <div class="orb orb-a"></div>
+  <div class="slide-label">01 — Introducción</div>
+  <h2>¿De qué trata<br>el proyecto?</h2>
+  <div style="max-width:700px; margin-top:20px;">
+    <p>Las empresas acumulan datos de clientes a diario, pero rara vez los usan de forma sistemática para <strong style="color:#fff">tomar mejores decisiones comerciales</strong>.</p>
+    <p style="margin-top:14px;">Este proyecto propone construir un <strong style="color:var(--accent)">árbol de decisiones</strong> que clasifique automáticamente a los clientes según su valor potencial, usando variables como historial de compras, zona geográfica y monto promedio de transacción.</p>
+  </div>
+  <div class="grid-3" style="margin-top:36px;">
+    <div class="card">
+      <h3>Problema</h3>
+      <p>No existe criterio claro para identificar al cliente "ideal" dentro de la base de datos.</p>
+    </div>
+    <div class="card">
+      <h3>Solución propuesta</h3>
+      <p>Un modelo de clasificación supervisado que aprende patrones y toma decisiones automáticas.</p>
+    </div>
+    <div class="card">
+      <h3>Impacto esperado</h3>
+      <p>Decisiones de marketing y ventas más eficientes, enfocadas en los clientes con mayor valor.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════
+     SLIDE 3 — OBJETIVO & JUSTIFICACIÓN
+═══════════════════════════════════════ -->
+<section class="slide" id="s3">
+  <div class="orb orb-b"></div>
+  <div class="slide-label">02 — Objetivo y Justificación</div>
+  <div class="grid-2" style="gap:40px; align-items:start;">
+    <div>
+      <h2>Objetivo</h2>
+      <blockquote>Desarrollar un árbol de decisiones que clasifique a los clientes en categorías de valor (<strong>Alto, Medio, Bajo</strong>) con base en sus datos transaccionales, para optimizar la estrategia comercial de la empresa.</blockquote>
+      <ul>
+        <li>Identificar los atributos más relevantes del cliente</li>
+        <li>Construir reglas de decisión interpretables</li>
+        <li>Validar el modelo con datos reales</li>
+      </ul>
+    </div>
+    <div>
+      <h2>Justificación</h2>
+      <p style="margin-bottom:16px;">Los árboles de decisión son una herramienta idónea porque:</p>
+      <div class="card" style="margin-bottom:14px;">
+        <h3>🔍 Interpretabilidad</h3>
+        <p>Las reglas generadas son legibles por humanos — no es una caja negra.</p>
+      </div>
+      <div class="card" style="margin-bottom:14px;">
+        <h3>📊 Robustez con datos mixtos</h3>
+        <p>Funciona con variables numéricas (monto) y categóricas (zona, producto).</p>
+      </div>
+      <div class="card">
+        <h3>⚡ Bajo costo computacional</h3>
+        <p>No requiere infraestructura compleja para datos de tamaño mediano.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════
+     SLIDE 4 — DATOS
+═══════════════════════════════════════ -->
+<section class="slide" id="s4">
+  <div class="orb orb-a"></div>
+  <div class="slide-label">03 — Datos del Problema</div>
+  <h2>Variables de entrada</h2>
+  <p style="margin-top:10px; max-width:600px;">Los datos disponibles por cliente que alimentarán el modelo de clasificación:</p>
+
+  <table style="margin-top:28px;">
+    <thead>
+      <tr>
+        <th>Variable</th>
+        <th>Tipo</th>
+        <th>Descripción</th>
+        <th>Rol en el modelo</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><span class="highlight">nombre</span></td>
+        <td>Categórico</td>
+        <td>Identificador del cliente</td>
+        <td>Identificación (no predictiva)</td>
+      </tr>
+      <tr>
+        <td><span class="highlight">producto</span></td>
+        <td>Categórico</td>
+        <td>Qué compra el cliente</td>
+        <td>Feature de entrada</td>
+      </tr>
+      <tr>
+        <td><span class="highlight">monto</span></td>
+        <td>Numérico</td>
+        <td>Valor en dinero de sus compras</td>
+        <td>Feature principal (más peso)</td>
+      </tr>
+      <tr>
+        <td><span class="highlight">zona</span></td>
+        <td>Categórico</td>
+        <td>Región geográfica del cliente</td>
+        <td>Feature de segmentación</td>
+      </tr>
+      <tr>
+        <td><span class="highlight">valor_cliente</span></td>
+        <td>Categórico</td>
+        <td>Alto / Medio / Bajo</td>
+        <td><strong style="color:var(--accent)">Variable objetivo (etiqueta)</strong></td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div style="margin-top:28px;">
+    <span class="badge neu">⚠ Pendiente</span>
+    <span style="font-family:'JetBrains Mono',monospace; font-size:.82rem; color:var(--muted); margin-left:12px;">
+      Definir los rangos de monto que separan las categorías Alto / Medio / Bajo — se hará con análisis exploratorio previo.
+    </span>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════
+     SLIDE 5 — ÁRBOL DE DECISIONES (DIAGRAMA)
+═══════════════════════════════════════ -->
+<section class="slide" id="s5">
+  <div class="orb orb-b"></div>
+  <div class="slide-label">04 — Árbol de Decisiones (Ejemplo Conceptual)</div>
+  <h2>Estructura del árbol</h2>
+  <p style="margin-top:6px;">Ejemplo ilustrativo de cómo el modelo ramifica las decisiones:</p>
+
+  <div class="tree-wrap">
+    <svg viewBox="0 0 860 480" width="100%" xmlns="http://www.w3.org/2000/svg" style="max-width:860px; font-family:'JetBrains Mono',monospace;">
+      <defs>
+        <filter id="glow">
+          <feGaussianBlur stdDeviation="3" result="blur"/>
+          <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+        </filter>
+      </defs>
+
+      <!-- ROOT -->
+      <rect x="300" y="10" width="260" height="52" rx="10" fill="#161e2e" stroke="#00e5ff" stroke-width="1.5"/>
+      <text x="430" y="32" text-anchor="middle" fill="#00e5ff" font-size="11" font-weight="600">RAÍZ</text>
+      <text x="430" y="50" text-anchor="middle" fill="#e2e8f0" font-size="12">¿Monto ≥ $5,000?</text>
+
+      <!-- LINES L1 -->
+      <line x1="370" y1="62" x2="200" y2="140" stroke="#1e2d45" stroke-width="1.5"/>
+      <line x1="490" y1="62" x2="660" y2="140" stroke="#1e2d45" stroke-width="1.5"/>
+      <text x="265" y="105" fill="#22c55e" font-size="10">SÍ</text>
+      <text x="590" y="105" fill="#ef4444" font-size="10">NO</text>
+
+      <!-- NODE L — MONTO ALTO -->
+      <rect x="80" y="140" width="240" height="52" rx="10" fill="#161e2e" stroke="#7c3aed" stroke-width="1.5"/>
+      <text x="200" y="162" text-anchor="middle" fill="#a78bfa" font-size="11">Nodo interno</text>
+      <text x="200" y="180" text-anchor="middle" fill="#e2e8f0" font-size="12">¿Zona = "Centro"?</text>
+
+      <!-- NODE R — MONTO BAJO -->
+      <rect x="540" y="140" width="240" height="52" rx="10" fill="#161e2e" stroke="#7c3aed" stroke-width="1.5"/>
+      <text x="660" y="162" text-anchor="middle" fill="#a78bfa" font-size="11">Nodo interno</text>
+      <text x="660" y="180" text-anchor="middle" fill="#e2e8f0" font-size="12">¿Producto = "Premium"?</text>
+
+      <!-- LINES L2 LEFT -->
+      <line x1="155" y1="192" x2="90" y2="280" stroke="#1e2d45" stroke-width="1.5"/>
+      <line x1="245" y1="192" x2="310" y2="280" stroke="#1e2d45" stroke-width="1.5"/>
+      <text x="95" y="240" fill="#22c55e" font-size="10">SÍ</text>
+      <text x="285" y="240" fill="#ef4444" font-size="10">NO</text>
+
+      <!-- LINES L2 RIGHT -->
+      <line x1="615" y1="192" x2="555" y2="280" stroke="#1e2d45" stroke-width="1.5"/>
+      <line x1="705" y1="192" x2="765" y2="280" stroke="#1e2d45" stroke-width="1.5"/>
+      <text x="556" y="240" fill="#22c55e" font-size="10">SÍ</text>
+      <text x="740" y="240" fill="#ef4444" font-size="10">NO</text>
+
+      <!-- LEAF LL — ALTO -->
+      <rect x="20" y="280" width="150" height="52" rx="10" fill="rgba(34,197,94,.12)" stroke="#22c55e" stroke-width="1.5"/>
+      <text x="95" y="302" text-anchor="middle" fill="#22c55e" font-size="10">HOJA</text>
+      <text x="95" y="322" text-anchor="middle" fill="#fff" font-size="13" font-weight="700">ALTO ⭐</text>
+
+      <!-- LEAF LR — MEDIO -->
+      <rect x="240" y="280" width="150" height="52" rx="10" fill="rgba(245,158,11,.12)" stroke="#f59e0b" stroke-width="1.5"/>
+      <text x="315" y="302" text-anchor="middle" fill="#f59e0b" font-size="10">HOJA</text>
+      <text x="315" y="322" text-anchor="middle" fill="#fff" font-size="13" font-weight="700">MEDIO 📊</text>
+
+      <!-- LEAF RL — MEDIO -->
+      <rect x="480" y="280" width="150" height="52" rx="10" fill="rgba(245,158,11,.12)" stroke="#f59e0b" stroke-width="1.5"/>
+      <text x="555" y="302" text-anchor="middle" fill="#f59e0b" font-size="10">HOJA</text>
+      <text x="555" y="322" text-anchor="middle" fill="#fff" font-size="13" font-weight="700">MEDIO 📊</text>
+
+      <!-- LEAF RR — BAJO -->
+      <rect x="695" y="280" width="150" height="52" rx="10" fill="rgba(239,68,68,.12)" stroke="#ef4444" stroke-width="1.5"/>
+      <text x="770" y="302" text-anchor="middle" fill="#ef4444" font-size="10">HOJA</text>
+      <text x="770" y="322" text-anchor="middle" fill="#fff" font-size="13" font-weight="700">BAJO 📉</text>
+
+      <!-- LEGEND -->
+      <rect x="20" y="400" width="820" height="68" rx="10" fill="#111827" stroke="#1e2d45"/>
+      <circle cx="70" cy="434" r="8" fill="rgba(0,229,255,.2)" stroke="#00e5ff"/>
+      <text x="86" y="438" fill="#94a3b8" font-size="11">Nodo raíz / interno (decisión)</text>
+      <circle cx="310" cy="434" r="8" fill="rgba(34,197,94,.2)" stroke="#22c55e"/>
+      <text x="326" y="438" fill="#94a3b8" font-size="11">Hoja: Cliente ALTO valor</text>
+      <circle cx="520" cy="434" r="8" fill="rgba(245,158,11,.2)" stroke="#f59e0b"/>
+      <text x="536" y="438" fill="#94a3b8" font-size="11">Hoja: Cliente MEDIO valor</text>
+      <circle cx="720" cy="434" r="8" fill="rgba(239,68,68,.2)" stroke="#ef4444"/>
+      <text x="736" y="438" fill="#94a3b8" font-size="11">Hoja: Cliente BAJO valor</text>
+      <text x="430" y="458" text-anchor="middle" fill="#475569" font-size="10">* Este árbol es ilustrativo. El modelo final se construirá con algoritmos como CART o ID3 sobre datos reales.</text>
+    </svg>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════
+     SLIDE 6 — METODOLOGÍA
+═══════════════════════════════════════ -->
+<section class="slide" id="s6">
+  <div class="orb orb-a"></div>
+  <div class="slide-label">05 — Metodología</div>
+  <h2>Proceso de desarrollo</h2>
+
+  <div class="flow" style="gap:4px; margin-top:32px;">
+    <div class="flow-step">
+      <span class="num">1</span>
+      <h3 style="font-size:.9rem;">Recolección<br>de datos</h3>
+      <p style="font-size:.82rem; margin-top:6px;">Exportar base de clientes con variables: nombre, producto, monto, zona</p>
+    </div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-step">
+      <span class="num">2</span>
+      <h3 style="font-size:.9rem;">Análisis<br>exploratorio</h3>
+      <p style="font-size:.82rem; margin-top:6px;">Estadísticas descriptivas, distribución por zona y producto, detección de outliers</p>
+    </div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-step">
+      <span class="num">3</span>
+      <h3 style="font-size:.9rem;">Etiquetado<br>de clientes</h3>
+      <p style="font-size:.82rem; margin-top:6px;">Definir rangos para clasificar: Alto / Medio / Bajo</p>
+    </div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-step">
+      <span class="num">4</span>
+      <h3 style="font-size:.9rem;">Construcción<br>del árbol</h3>
+      <p style="font-size:.82rem; margin-top:6px;">Algoritmo CART con scikit-learn. Criterio de división: Gini o Entropía</p>
+    </div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-step">
+      <span class="num">5</span>
+      <h3 style="font-size:.9rem;">Validación<br>del modelo</h3>
+      <p style="font-size:.82rem; margin-top:6px;">Train/test split 80-20%. Métricas: accuracy, precision, recall</p>
+    </div>
+  </div>
+
+  <div style="margin-top:32px;">
+    <h3 style="color:var(--accent3); margin-bottom:12px;">Herramientas a utilizar</h3>
+    <div style="display:flex; gap:12px; flex-wrap:wrap;">
+      <span class="highlight">Python 3</span>
+      <span class="highlight">pandas</span>
+      <span class="highlight">scikit-learn</span>
+      <span class="highlight">matplotlib</span>
+      <span class="highlight">Jupyter Notebook</span>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════
+     SLIDE 7 — DESARROLLO / CRITERIOS
+═══════════════════════════════════════ -->
+<section class="slide" id="s7">
+  <div class="orb orb-b"></div>
+  <div class="slide-label">06 — Desarrollo</div>
+  <h2>Criterios de decisión<br>del árbol</h2>
+  <div class="grid-2" style="margin-top:24px; gap:24px;">
+    <div>
+      <p>El algoritmo CART selecciona automáticamente la variable y el umbral que mejor divide los datos en cada nodo, usando el criterio de <strong style="color:#fff">impureza de Gini</strong>:</p>
+      <div style="background:var(--card); border:1px solid var(--border); border-radius:12px; padding:20px; margin-top:20px; font-family:'JetBrains Mono',monospace; font-size:.9rem; color:var(--accent);">
+        Gini(t) = 1 − Σ p(i|t)²
+        <div style="color:var(--muted); font-size:.75rem; margin-top:8px;">donde p(i|t) = proporción de clase i en nodo t</div>
+      </div>
+      <p style="margin-top:16px;">Un Gini = 0 significa nodo puro (todos los registros de la misma clase). El árbol busca minimizar la impureza al dividir.</p>
+    </div>
+    <div>
+      <h3 style="margin-bottom:16px;">Variables por importancia esperada</h3>
+      <div class="card" style="margin-bottom:12px;">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <span style="font-family:'JetBrains Mono',monospace; font-size:.85rem;">monto</span>
+          <div style="width:55%; background:var(--border); border-radius:4px; height:8px;">
+            <div style="width:90%; background:var(--accent); border-radius:4px; height:8px;"></div>
+          </div>
+          <span style="color:var(--accent); font-size:.8rem;">Alta</span>
+        </div>
+      </div>
+      <div class="card" style="margin-bottom:12px;">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <span style="font-family:'JetBrains Mono',monospace; font-size:.85rem;">zona</span>
+          <div style="width:55%; background:var(--border); border-radius:4px; height:8px;">
+            <div style="width:60%; background:var(--accent2); border-radius:4px; height:8px;"></div>
+          </div>
+          <span style="color:var(--accent2); font-size:.8rem;">Media</span>
+        </div>
+      </div>
+      <div class="card">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <span style="font-family:'JetBrains Mono',monospace; font-size:.85rem;">producto</span>
+          <div style="width:55%; background:var(--border); border-radius:4px; height:8px;">
+            <div style="width:40%; background:var(--accent3); border-radius:4px; height:8px;"></div>
+          </div>
+          <span style="color:var(--accent3); font-size:.8rem;">Media-baja</span>
+        </div>
+      </div>
+      <p style="margin-top:16px; font-size:.85rem;">*Importancias tentativas — el modelo real las calculará con los datos.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════
+     SLIDE 8 — ESTADO ACTUAL / PENDIENTES
+═══════════════════════════════════════ -->
+<section class="slide" id="s8">
+  <div class="orb orb-a"></div>
+  <div class="slide-label">07 — Estado Actual del Proyecto</div>
+  <h2>¿Qué está listo<br>y qué falta?</h2>
+  <div class="grid-2" style="margin-top:28px; gap:24px;">
+    <div>
+      <h3 style="color:var(--yes); margin-bottom:16px;">✓ Completado</h3>
+      <div class="card" style="margin-bottom:12px; border-color: rgba(34,197,94,.3);">
+        <span class="badge yes" style="margin-bottom:8px;">Listo</span>
+        <p>Definición del problema de negocio</p>
+      </div>
+      <div class="card" style="margin-bottom:12px; border-color: rgba(34,197,94,.3);">
+        <span class="badge yes" style="margin-bottom:8px;">Listo</span>
+        <p>Identificación de variables disponibles</p>
+      </div>
+      <div class="card" style="border-color: rgba(34,197,94,.3);">
+        <span class="badge yes" style="margin-bottom:8px;">Listo</span>
+        <p>Selección de técnica: Árbol de decisiones (CART)</p>
+      </div>
+    </div>
+    <div>
+      <h3 style="color:var(--accent3); margin-bottom:16px;">⏳ Pendiente</h3>
+      <div class="card" style="margin-bottom:12px; border-color: rgba(245,158,11,.3);">
+        <span class="badge neu" style="margin-bottom:8px;">Pendiente</span>
+        <p>Recolección y limpieza de datos reales de clientes</p>
+      </div>
+      <div class="card" style="margin-bottom:12px; border-color: rgba(245,158,11,.3);">
+        <span class="badge neu" style="margin-bottom:8px;">Pendiente</span>
+        <p>Definir umbrales para etiquetar: Alto / Medio / Bajo</p>
+      </div>
+      <div class="card" style="margin-bottom:12px; border-color: rgba(245,158,11,.3);">
+        <span class="badge neu" style="margin-bottom:8px;">Pendiente</span>
+        <p>Implementación del modelo en Python + validación</p>
+      </div>
+      <div class="card" style="border-color: rgba(245,158,11,.3);">
+        <span class="badge neu" style="margin-bottom:8px;">Pendiente</span>
+        <p>Visualización del árbol final e interpretación de reglas</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════
+     SLIDE 9 — REFERENCIAS
+═══════════════════════════════════════ -->
+<section class="slide" id="s9">
+  <div class="orb orb-b"></div>
+  <div class="slide-label">08 — Referencias</div>
+  <h2>Bibliografía</h2>
+  <ul class="ref-list" style="margin-top:28px;">
+    <li>
+      <span>[1]</span> Breiman, L., Friedman, J., Olshen, R., & Stone, C. (1984). <em>Classification and Regression Trees</em>. Chapman & Hall/CRC.
+    </li>
+    <li>
+      <span>[2]</span> Quinlan, J. R. (1986). Induction of decision trees. <em>Machine Learning</em>, 1(1), 81–106.
+    </li>
+    <li>
+      <span>[3]</span> Géron, A. (2022). <em>Hands-On Machine Learning with Scikit-Learn, Keras, and TensorFlow</em> (3rd ed.). O'Reilly Media.
+    </li>
+    <li>
+      <span>[4]</span> Scikit-learn developers. (2024). <em>Decision Trees — scikit-learn documentation</em>. https://scikit-learn.org/stable/modules/tree.html
+    </li>
+    <li>
+      <span>[5]</span> Han, J., Kamber, M., & Pei, J. (2011). <em>Data Mining: Concepts and Techniques</em> (3rd ed.). Morgan Kaufmann.
+    </li>
+    <li>
+      <span>[6]</span> Witten, I. H., Frank, E., Hall, M. A., & Pal, C. J. (2016). <em>Data Mining: Practical Machine Learning Tools and Techniques</em> (4th ed.). Morgan Kaufmann.
+    </li>
+  </ul>
+</section>
+
+<!-- ══════════════════════════════════════
+     SLIDE 10 — CIERRE
+═══════════════════════════════════════ -->
+<section class="slide" id="s10">
+  <div class="orb orb-a"></div>
+  <div class="orb orb-b"></div>
+  <div class="slide-label">// Fin de la presentación</div>
+  <h1>Gracias</h1>
+  <p style="margin-top:24px; max-width:500px; font-size:1.15rem;">
+    El árbol de decisiones como herramienta para tomar decisiones comerciales claras, trazables y eficientes.
+  </p>
+  <div style="margin-top:48px; font-family:'JetBrains Mono',monospace; font-size:.85rem; color:var(--muted);">
+    Héctor Alonso Guzmán Gutiérrez &nbsp;·&nbsp; Toma de Decisiones &nbsp;·&nbsp; 2026
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════
+     NAVEGACIÓN
+═══════════════════════════════════════ -->
+<nav>
+  <button id="prevBtn" onclick="navigate(-1)">← Ant</button>
+  <div class="slide-dots" id="dots"></div>
+  <span id="counter">1 / 10</span>
+  <button id="nextBtn" onclick="navigate(1)">Sig →</button>
+</nav>
+
+<script>
+  const slides = document.querySelectorAll('.slide');
+  const total = slides.length;
+  let current = 0;
+
+  const dotsEl = document.getElementById('dots');
+  const counter = document.getElementById('counter');
+  const progress = document.getElementById('progress');
+
+  // Build dots
+  slides.forEach((_, i) => {
+    const d = document.createElement('div');
+    d.className = 'dot' + (i === 0 ? ' active' : '');
+    d.onclick = () => goTo(i);
+    dotsEl.appendChild(d);
+  });
+
+  function goTo(n) {
+    slides[current].classList.remove('active');
+    document.querySelectorAll('.dot')[current].classList.remove('active');
+    current = Math.max(0, Math.min(total - 1, n));
+    slides[current].classList.add('active');
+    document.querySelectorAll('.dot')[current].classList.add('active');
+    counter.textContent = `${current + 1} / ${total}`;
+    progress.style.width = `${((current + 1) / total) * 100}%`;
+  }
+
+  function navigate(dir) { goTo(current + dir); }
+
+  // Keyboard
+  document.addEventListener('keydown', e => {
+    if (e.key === 'ArrowRight' || e.key === ' ') navigate(1);
+    if (e.key === 'ArrowLeft') navigate(-1);
+  });
+
+  // Init
+  progress.style.width = `${(1 / total) * 100}%`;
+</script>
+</body>
+</html>
